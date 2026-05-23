@@ -1,0 +1,14 @@
+{
+    "required": true,
+    "package": "com.likerain.roguelike.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "EndPortalBlockMixin",
+        "MonsterMixin",
+        "MobMixin"
+    ],
+    "client": [],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}
