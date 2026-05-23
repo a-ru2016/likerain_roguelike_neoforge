@@ -11,16 +11,18 @@
  */
 package com.timeattack.roguelike.network;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record KitSelectedPayload(String selectedKit) implements CustomPacketPayload
+public record OpenStartGameScreenPayload(List<String> kits) implements CustomPacketPayload
 {
-    public static final CustomPacketPayload.Type<KitSelectedPayload> TYPE = new CustomPacketPayload.Type(ResourceLocation.fromNamespaceAndPath((String)"timeattackroguelike", (String)"kit_selected"));
-    public static final StreamCodec<FriendlyByteBuf, KitSelectedPayload> STREAM_CODEC = StreamCodec.composite((StreamCodec)ByteBufCodecs.STRING_UTF8, KitSelectedPayload::selectedKit, KitSelectedPayload::new);
+    public static final CustomPacketPayload.Type<OpenStartGameScreenPayload> TYPE = new CustomPacketPayload.Type(ResourceLocation.fromNamespaceAndPath((String)"timeattackroguelike", (String)"open_start_game_screen"));
+    public static final StreamCodec<FriendlyByteBuf, OpenStartGameScreenPayload> STREAM_CODEC = StreamCodec.composite((StreamCodec)ByteBufCodecs.collection(ArrayList::new, (StreamCodec)ByteBufCodecs.STRING_UTF8), OpenStartGameScreenPayload::kits, OpenStartGameScreenPayload::new);
 
     public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
         return TYPE;

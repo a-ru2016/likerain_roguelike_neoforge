@@ -1,15 +1,29 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.network.chat.Component
+ *  net.minecraft.resources.ResourceLocation
+ *  net.minecraft.server.level.ServerPlayer
+ */
 package com.timeattack.roguelike.challenge;
 
+import com.timeattack.roguelike.challenge.Reward;
 import com.timeattack.roguelike.data.CarryoverData;
-import net.minecraft.server.level.ServerPlayer;
+import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import java.util.List;
+import net.minecraft.server.level.ServerPlayer;
 
 public interface Challenge {
-    ResourceLocation getId();
-    Component getDisplayName();
-    void update(ServerPlayer player, CarryoverData carryover);
-    boolean isCompleted(CarryoverData carryover);
-    List<Reward> getRewards();
+    public ResourceLocation getId();
+
+    public Component getDisplayName();
+
+    public void update(ServerPlayer var1, CarryoverData var2);
+
+    public boolean isCompleted(CarryoverData var1);
+
+    public List<Reward> getRewards();
 }
+

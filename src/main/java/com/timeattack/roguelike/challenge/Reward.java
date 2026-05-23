@@ -1,3 +1,6 @@
+/*
+ * Decompiled with CFR 0.152.
+ */
 package com.timeattack.roguelike.challenge;
 
 public class Reward {
@@ -9,3 +12,4 @@ public class Reward {
         this.value = value;
     }
 }
+

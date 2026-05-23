@@ -17,10 +17,10 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record KitSelectedPayload(String selectedKit) implements CustomPacketPayload
+public record StartGamePayload(String selectedKit, float difficulty) implements CustomPacketPayload
 {
-    public static final CustomPacketPayload.Type<KitSelectedPayload> TYPE = new CustomPacketPayload.Type(ResourceLocation.fromNamespaceAndPath((String)"timeattackroguelike", (String)"kit_selected"));
-    public static final StreamCodec<FriendlyByteBuf, KitSelectedPayload> STREAM_CODEC = StreamCodec.composite((StreamCodec)ByteBufCodecs.STRING_UTF8, KitSelectedPayload::selectedKit, KitSelectedPayload::new);
+    public static final CustomPacketPayload.Type<StartGamePayload> TYPE = new CustomPacketPayload.Type(ResourceLocation.fromNamespaceAndPath((String)"timeattackroguelike", (String)"start_game"));
+    public static final StreamCodec<FriendlyByteBuf, StartGamePayload> STREAM_CODEC = StreamCodec.composite((StreamCodec)ByteBufCodecs.STRING_UTF8, StartGamePayload::selectedKit, (StreamCodec)ByteBufCodecs.FLOAT, StartGamePayload::difficulty, StartGamePayload::new);
 
     public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
         return TYPE;

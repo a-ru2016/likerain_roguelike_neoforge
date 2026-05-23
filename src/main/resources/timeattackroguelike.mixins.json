@@ -3,7 +3,8 @@
     "package": "com.timeattack.roguelike.mixin",
     "compatibilityLevel": "JAVA_21",
     "mixins": [
-        "EndPortalBlockMixin"
+        "EndPortalBlockMixin",
+        "MonsterMixin"
     ],
     "client": [],
     "injectors": {
