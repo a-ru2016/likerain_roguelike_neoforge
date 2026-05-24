@@ -283,6 +283,7 @@ public class LikerainRoguelike {
         PlayerRunState runState = PlayerRunState.get(player2.serverLevel());
         if (!runState.gameStarted) {
             player2.getInventory().clearContent();
+            com.likerain.roguelike.util.LootablesCompat.resetUsageData(uuid, player2.getServer());
             boolean hasBook = false;
             for (int i = 0; i < player2.getInventory().getContainerSize(); ++i) {
                 if (!player2.getInventory().getItem(i).is((Item)START_BOOK.get())) continue;
