@@ -64,7 +64,9 @@ public class LikerainRoguelikeClient {
     public static void onClientTick(ClientTickEvent.Post event) {
         if (openCarryoverKey != null) {
             while (openCarryoverKey.consumeClick()) {
-                PacketDistributor.sendToServer((CustomPacketPayload)new OpenCarryoverScreenPayload(), (CustomPacketPayload[])new CustomPacketPayload[0]);
+                if (!(Minecraft.getInstance().screen instanceof CarryoverSelectScreen)) {
+                    PacketDistributor.sendToServer((CustomPacketPayload)new OpenCarryoverScreenPayload(), (CustomPacketPayload[])new CustomPacketPayload[0]);
+                }
             }
         }
     }

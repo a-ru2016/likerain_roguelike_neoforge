@@ -224,7 +224,7 @@ public class LikerainRoguelike {
             Player patt0$temp = context.player();
             if (patt0$temp instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer)patt0$temp;
-                RunEndHandler.openCarryoverSelectScreen(serverPlayer);
+                RunEndHandler.openCarryoverSelectScreen(serverPlayer, true);
             }
         }));
         registrar.playToServer(StartGamePayload.TYPE, StartGamePayload.STREAM_CODEC, (payload, context) -> context.enqueueWork(() -> {
@@ -262,6 +262,9 @@ public class LikerainRoguelike {
                 serverPlayer.drop(reincarnateStack, false);
             }
             for (ServerPlayer sp : serverPlayer.getServer().getPlayerList().getPlayers()) {
+                sp.setHealth(sp.getMaxHealth());
+                sp.getFoodData().setFoodLevel(20);
+                sp.getFoodData().setSaturation(20.0f);
                 PacketDistributor.sendToPlayer((ServerPlayer)sp, (CustomPacketPayload)new SyncRunStatePayload(true, payload.difficulty()), (CustomPacketPayload[])new CustomPacketPayload[0]);
                 sp.sendSystemMessage((Component)Component.literal((String)"\u00a7a\u00a7l\u30b2\u30fc\u30e0\u304c\u958b\u59cb\u3055\u308c\u307e\u3057\u305f\uff01"));
                 sp.sendSystemMessage((Component)Component.literal((String)("\u00a7e\u521d\u671f\u30ad\u30c3\u30c8: " + payload.selectedKit() + " | \u96e3\u6613\u5ea6: " + payload.difficulty())));
@@ -318,6 +321,20 @@ public class LikerainRoguelike {
         LivingEntity livingEntity = event.getEntity();
         if (livingEntity instanceof ServerPlayer && ReincarnationHandler.invulnerablePlayers.contains((player = (ServerPlayer)livingEntity).getUUID())) {
             event.setCanceled(true);
+            return;
+        }
+
+        // Mowzie's Mobsの弱体化が効きにくい（あるいは攻撃力が高すぎる）問題への対策
+        // 攻撃者がMowzie's Mobsであり、かつ弱体化状態である場合、ダメージを割合で減少させる
+        DamageSource source = event.getSource();
+        if (source.getEntity() instanceof LivingEntity attacker) {
+            boolean isMowzie = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(attacker.getType()).getNamespace().equals("mowziesmobs");
+            if (isMowzie && attacker.hasEffect(MobEffects.WEAKNESS)) {
+                int amplifier = attacker.getEffect(MobEffects.WEAKNESS).getAmplifier();
+                // 弱体化レベルに応じてさらにダメージを減少（レベル1で30%, レベル2で50%, レベル3以上で70%減少）
+                float reductionMultiplier = 1.0f - Math.min(0.7f, 0.3f + amplifier * 0.2f);
+                event.setAmount(event.getAmount() * reductionMultiplier);
+            }
         }
     }
 
@@ -473,7 +490,7 @@ public class LikerainRoguelike {
         if (isNight && !isWhiteNight && (tickCount = (long)server.getTickCount()) % 100L == 0L) {
             double nightProgress = (double)runState.currentNightTicks / 12000.0;
             int baseCount = 1;
-            int extraCount = (int)(nightProgress * 3.0 * (1.0 + (double)runState.difficulty * 0.5));
+            int extraCount = (int)(nightProgress * 3.0 * (double)runState.difficulty * 0.5);
             int spawnCount = baseCount + extraCount;
             int maxNearby = Math.min(80, 20 + (int)(nightProgress * 20.0) + (int)((double)runState.difficulty * 5.0));
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -672,11 +689,11 @@ public class LikerainRoguelike {
         AttributeInstance dmgAttr;
         AttributeInstance hpAttr;
         Mob mob = event.getEntity();
-        if (!(mob instanceof Monster)) {
+        boolean isMowzie = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getNamespace().equals("mowziesmobs");
+        if (!(mob instanceof Monster) && !isMowzie) {
             return;
         }
-        Monster monster = (Monster)mob;
-        Level level = monster.level();
+        Level level = mob.level();
         if (!(level instanceof ServerLevel)) {
             return;
         }
@@ -694,12 +711,22 @@ public class LikerainRoguelike {
             totalItems += pState.accumulatedItems;
             totalXp += pState.accumulatedXp;
         }
-        double hpMultiplier = 1.0 + diff * 0.15 + (double)days * 0.05;
-        double dmgMultiplier = 1.0 + diff * 0.1 + (double)days * 0.03;
+        double hpMultiplier = (0.05 + diff * 0.255) + (double)days * 0.05;
+        double dmgMultiplier = (0.1 + diff * 0.2) + (double)days * 0.03;
         hpMultiplier += (double)totalItems / 2000.0 * 0.1;
         hpMultiplier += (double)totalXp / 5000.0 * 0.1;
         dmgMultiplier += (double)totalItems / 2000.0 * 0.05;
         dmgMultiplier += (double)totalXp / 5000.0 * 0.05;
+
+        if (isMowzie) {
+            // Mowzie's mobs have high base stats and custom attack patterns, so we reduce the scaling more aggressively.
+            boolean isBluff = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getPath().equals("bluff");
+            double mowziesHpReduction = 0.1 + (diff / 9.0) * 0.6; // Max 0.7 instead of 1.0
+            double mowziesDmgReduction = isBluff ? (0.1 + (diff / 9.0) * 0.3) : (0.2 + (diff / 9.0) * 0.6); // Bluff: Max 0.4, Others: Max 0.8
+            hpMultiplier *= mowziesHpReduction;
+            dmgMultiplier *= mowziesDmgReduction;
+        }
+
         hpMultiplier = Math.min(4.0, hpMultiplier);
         dmgMultiplier = Math.min(3.0, dmgMultiplier);
         // ソロプレイ（オンラインプレイヤーが1人）の場合、敵の最大体力を6割にする
@@ -707,11 +734,11 @@ public class LikerainRoguelike {
         if (onlinePlayerCount == 1) {
             hpMultiplier *= 0.6;
         }
-        if (Math.abs(hpMultiplier - 1.0) > 1e-9 && (hpAttr = monster.getAttribute(Attributes.MAX_HEALTH)) != null) {
+        if (Math.abs(hpMultiplier - 1.0) > 1e-9 && (hpAttr = mob.getAttribute(Attributes.MAX_HEALTH)) != null) {
             hpAttr.addPermanentModifier(new AttributeModifier(ResourceLocation.fromNamespaceAndPath((String)MOD_ID, (String)"roguelike_mob_hp"), hpMultiplier - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
-            monster.setHealth(monster.getMaxHealth());
+            mob.setHealth(mob.getMaxHealth());
         }
-        if (dmgMultiplier > 1.0 && (dmgAttr = monster.getAttribute(Attributes.ATTACK_DAMAGE)) != null) {
+        if (Math.abs(dmgMultiplier - 1.0) > 1e-9 && (dmgAttr = mob.getAttribute(Attributes.ATTACK_DAMAGE)) != null) {
             dmgAttr.addPermanentModifier(new AttributeModifier(ResourceLocation.fromNamespaceAndPath((String)MOD_ID, (String)"roguelike_mob_damage"), dmgMultiplier - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
         }
     }
@@ -752,8 +779,18 @@ public class LikerainRoguelike {
         if (dim == Level.END) {
             return EntityType.ENDERMAN;
         }
-        EntityType[] overworldMonsters = new EntityType[]{EntityType.ZOMBIE, EntityType.SKELETON, EntityType.CREEPER, EntityType.SPIDER};
-        return overworldMonsters[level.random.nextInt(overworldMonsters.length)];
+        List<EntityType<?>> overworldMonsters = new java.util.ArrayList<>(List.of(EntityType.ZOMBIE, EntityType.SKELETON, EntityType.CREEPER, EntityType.SPIDER));
+        String[] mowziesMobIds = new String[]{"foliaath", "baby_foliaath", "umvuthana", "umvuthana_raptor", "naga", "bluff", "elokosa_howler"};
+        for (String id : mowziesMobIds) {
+            ResourceLocation loc = ResourceLocation.fromNamespaceAndPath("mowziesmobs", id);
+            if (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(loc)) {
+                EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(loc);
+                if (type != null) {
+                    overworldMonsters.add(type);
+                }
+            }
+        }
+        return overworldMonsters.get(level.random.nextInt(overworldMonsters.size()));
     }
 
     private void spawnMonsterNearPlayer(ServerPlayer player, ServerLevel level, PlayerRunState runState, double nightProgress) {

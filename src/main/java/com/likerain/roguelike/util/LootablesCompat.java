@@ -5,7 +5,6 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +13,7 @@ import org.slf4j.LoggerFactory;
  *
  * Lootablesは UsageData を PersistentState として
  * server.overworld().getDataStorage() に "lootables_usage_data" キーで保存している。
- * UsageData 内部の usesMap は Map<Identifier, Map<UUID, Int>> 構造であり、
+ * UsageData 内部 of usesMap は Map<Identifier, Map<UUID, Int>> 構造であり、
  * プレイヤーリセット時は「各 Identifier の内側 Map から UUID エントリを削除」する必要がある。
  */
 public class LootablesCompat {
@@ -30,11 +29,9 @@ public class LootablesCompat {
     private static Field keyMapField = null;
     private static Method markDirtyMethod = null;
 
-    // DimensionDataStorage.get(String) で UsageData インスタンスを取得するために使う
-    // NeoForge: ServerLevel#getDataStorage() -> DimensionDataStorage
-    // DimensionDataStorage#get(SavedData.Factory, String) は Nullable を返す
-    private static Method dataStorageGetMethod = null;
-    private static Object usageDataFactory = null; // UsageData.TYPE の NeoForge 等価物
+    // LootablesData インスタンスと getUsageData メソッド
+    private static Object lootablesDataInstance = null;
+    private static Method getUsageDataMethod = null;
 
     private static void init() {
         if (checked) return;
@@ -61,9 +58,22 @@ public class LootablesCompat {
                 }
             }
 
-            available = (usesMapField != null || keyMapField != null);
-            LOGGER.info("[LootablesCompat] 初期化完了。usesMap={}, keyMap={}, available={}",
-                    usesMapField != null, keyMapField != null, available);
+            // LootablesData (object) から INSTANCE と getUsageData メソッドを取得
+            try {
+                Class<?> lootablesDataClass = Class.forName("me.fzzyhmstrs.lootables.data.LootablesData");
+                Field instanceField = lootablesDataClass.getDeclaredField("INSTANCE");
+                instanceField.setAccessible(true);
+                lootablesDataInstance = instanceField.get(null);
+
+                getUsageDataMethod = lootablesDataClass.getDeclaredMethod("getUsageData", MinecraftServer.class);
+                getUsageDataMethod.setAccessible(true);
+            } catch (Exception e) {
+                LOGGER.warn("[LootablesCompat] LootablesData.getUsageData メソッドの取得に失敗しました: {}", e.getMessage());
+            }
+
+            available = (usesMapField != null || keyMapField != null) && (getUsageDataMethod != null);
+            LOGGER.info("[LootablesCompat] 初期化完了。usesMap={}, keyMap={}, getUsageDataMethod={}, available={}",
+                    usesMapField != null, keyMapField != null, getUsageDataMethod != null, available);
         } catch (Exception e) {
             LOGGER.info("[LootablesCompat] Lootables mod が見つかりません: {}", e.getMessage());
             available = false;
@@ -79,7 +89,7 @@ public class LootablesCompat {
      * プレイヤーの使用履歴を全てリセットする。
      *
      * @param playerUuid  対象プレイヤーの UUID
-     * @param server      MinecraftServer インスタンス（DimensionDataStorage アクセスに使用）
+     * @param server      MinecraftServer インスタンス（UsageData 取得に使用）
      */
     public static void resetUsageData(UUID playerUuid, MinecraftServer server) {
         if (!isAvailable()) return;
@@ -89,9 +99,8 @@ public class LootablesCompat {
         }
 
         try {
-            // DimensionDataStorage から "lootables_usage_data" キーで UsageData インスタンスを取得
-            ServerLevel overworld = server.overworld();
-            Object usageDataInstance = getUsageDataInstance(overworld);
+            // LootablesData.getUsageData(server) を呼び出して UsageData インスタンスを取得
+            Object usageDataInstance = getUsageDataInstance(server);
             if (usageDataInstance == null) {
                 LOGGER.warn("[LootablesCompat] UsageData インスタンスが取得できませんでした (未使用の可能性あり)");
                 return;
@@ -105,11 +114,21 @@ public class LootablesCompat {
                 @SuppressWarnings("unchecked")
                 Map<Object, Map<Object, ?>> usesMap = (Map<Object, Map<Object, ?>>) usesMapField.get(usageDataInstance);
                 if (usesMap != null) {
-                    for (Map<Object, ?> innerMap : usesMap.values()) {
+                    LOGGER.info("[LootablesCompat] usesMap size={}", usesMap.size());
+                    for (Map.Entry<Object, Map<Object, ?>> entry : usesMap.entrySet()) {
+                        Object id = entry.getKey();
+                        Map<Object, ?> innerMap = entry.getValue();
                         if (innerMap != null) {
+                            LOGGER.info("[LootablesCompat] usesMap[{}] keys={}", id, innerMap.keySet());
+                            for (Object key : innerMap.keySet()) {
+                                LOGGER.info("[LootablesCompat]   key: {} (class: {})", key, key.getClass().getName());
+                            }
                             boolean removedUuid = innerMap.remove(playerUuid) != null;
                             boolean removedStr  = innerMap.remove(playerUuid.toString()) != null;
-                            if (removedUuid || removedStr) changed = true;
+                            if (removedUuid || removedStr) {
+                                LOGGER.info("[LootablesCompat]   usesMap[{}] からプレイヤーデータを削除しました (removedUuid={}, removedStr={})", id, removedUuid, removedStr);
+                                changed = true;
+                            }
                         }
                     }
                 }
@@ -120,11 +139,21 @@ public class LootablesCompat {
                 @SuppressWarnings("unchecked")
                 Map<Object, Map<Object, ?>> keyMap = (Map<Object, Map<Object, ?>>) keyMapField.get(usageDataInstance);
                 if (keyMap != null) {
-                    for (Map<Object, ?> innerMap : keyMap.values()) {
+                    LOGGER.info("[LootablesCompat] keyMap size={}", keyMap.size());
+                    for (Map.Entry<Object, Map<Object, ?>> entry : keyMap.entrySet()) {
+                        Object id = entry.getKey();
+                        Map<Object, ?> innerMap = entry.getValue();
                         if (innerMap != null) {
+                            LOGGER.info("[LootablesCompat] keyMap[{}] keys={}", id, innerMap.keySet());
+                            for (Object key : innerMap.keySet()) {
+                                LOGGER.info("[LootablesCompat]   key: {} (class: {})", key, key.getClass().getName());
+                            }
                             boolean removedUuid = innerMap.remove(playerUuid) != null;
                             boolean removedStr  = innerMap.remove(playerUuid.toString()) != null;
-                            if (removedUuid || removedStr) changed = true;
+                            if (removedUuid || removedStr) {
+                                LOGGER.info("[LootablesCompat]   keyMap[{}] からプレイヤーデータを削除しました (removedUuid={}, removedStr={})", id, removedUuid, removedStr);
+                                changed = true;
+                            }
                         }
                     }
                 }
@@ -146,74 +175,18 @@ public class LootablesCompat {
     }
 
     /**
-     * サーバーの DimensionDataStorage から UsageData インスタンスを取得する。
-     * まだ保存されていない場合（一度も使用していないワールド）は null を返す可能性がある。
+     * LootablesData.getUsageData(server) を呼び出して UsageData インスタンスを取得する。
      */
-    private static Object getUsageDataInstance(ServerLevel overworld) {
-        try {
-            // NeoForge: ServerLevel#getDataStorage() -> DimensionDataStorage
-            Method getDataStorageMethod = overworld.getClass().getMethod("getDataStorage");
-            Object dataStorage = getDataStorageMethod.invoke(overworld);
-            if (dataStorage == null) return null;
-
-            // DimensionDataStorage#get(SavedData.Factory, String)
-            // Factory を作るのは難しいので、内部の map フィールドを直接アクセスする
-            return getUsageDataFromStorage(dataStorage);
-        } catch (Exception e) {
-            LOGGER.warn("[LootablesCompat] DimensionDataStorage 取得失敗、フォールバック試行: {}", e.getMessage());
-            return getUsageDataFallback(overworld);
+    private static Object getUsageDataInstance(MinecraftServer server) {
+        if (lootablesDataInstance == null || getUsageDataMethod == null) {
+            return null;
         }
-    }
-
-    /**
-     * DimensionDataStorage の内部 cache/map フィールドから "lootables_usage_data" を探す。
-     */
-    private static Object getUsageDataFromStorage(Object dataStorage) {
         try {
-            // NeoForge DimensionDataStorage は内部に Map<String, SavedData> cache を持つ
-            for (Field f : dataStorage.getClass().getDeclaredFields()) {
-                if (!Map.class.isAssignableFrom(f.getType())) continue;
-                f.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                Map<String, Object> cacheMap = (Map<String, Object>) f.get(dataStorage);
-                if (cacheMap == null) continue;
-                Object found = cacheMap.get("lootables_usage_data");
-                if (found != null && usageDataClass != null && usageDataClass.isInstance(found)) {
-                    return found;
-                }
-            }
+            return getUsageDataMethod.invoke(lootablesDataInstance, server);
         } catch (Exception e) {
-            LOGGER.warn("[LootablesCompat] DataStorage cache 探索失敗: {}", e.getMessage());
+            LOGGER.warn("[LootablesCompat] LootablesData.getUsageData の呼び出しに失敗しました: {}", e.getMessage());
+            return null;
         }
-        return null;
-    }
-
-    /**
-     * フォールバック: ServerLevel の persistentStateManager (Fabric系) から取得を試みる。
-     */
-    private static Object getUsageDataFallback(ServerLevel overworld) {
-        try {
-            for (Method m : overworld.getClass().getMethods()) {
-                if (!m.getName().contains("StateManager") && !m.getName().contains("PersistentState")) continue;
-                m.setAccessible(true);
-                Object psm = m.invoke(overworld);
-                if (psm == null) continue;
-                // get(String) または get(Class, String) を呼ぶ
-                for (Method gm : psm.getClass().getMethods()) {
-                    if (!"get".equals(gm.getName())) continue;
-                    Class<?>[] params = gm.getParameterTypes();
-                    if (params.length == 1 && params[0] == String.class) {
-                        Object result = gm.invoke(psm, "lootables_usage_data");
-                        if (result != null && usageDataClass != null && usageDataClass.isInstance(result)) {
-                            return result;
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.warn("[LootablesCompat] フォールバック取得失敗: {}", e.getMessage());
-        }
-        return null;
     }
 
     /**

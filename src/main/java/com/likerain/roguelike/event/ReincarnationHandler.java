@@ -81,6 +81,10 @@ public class ReincarnationHandler {
     }
 
     public static void executeReincarnation(MinecraftServer server) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            invulnerablePlayers.add(player.getUUID());
+            player.setInvulnerable(true);
+        }
         boolean wasNight;
         ServerLevel overworld = server.overworld();
         PlayerRunState runState = PlayerRunState.get(overworld);
@@ -125,6 +129,9 @@ public class ReincarnationHandler {
             LootablesCompat.resetUsageData(uuid, server);
             player.setExperienceLevels(0);
             player.setExperiencePoints(0);
+            player.setHealth(player.getMaxHealth());
+            player.getFoodData().setFoodLevel(20);
+            player.getFoodData().setSaturation(20.0f);
             player.teleportTo(overworld, (double)targetPos.getX() + 0.5, (double)targetPos.getY() + 0.5, (double)targetPos.getZ() + 0.5, player.getYRot(), player.getXRot());
             player.setRespawnPosition(overworld.dimension(), targetPos, 0.0f, true, false);
             if (state.isSpectator) {

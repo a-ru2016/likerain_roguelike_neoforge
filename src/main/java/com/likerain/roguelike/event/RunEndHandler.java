@@ -135,6 +135,10 @@ public class RunEndHandler {
     }
 
     public static void openCarryoverSelectScreen(ServerPlayer player) {
+        RunEndHandler.openCarryoverSelectScreen(player, false);
+    }
+
+    public static void openCarryoverSelectScreen(ServerPlayer player, final boolean openedByMenu) {
         CarryoverData carryover = CarryoverStorage.load(player.getUUID());
         final double finalSlots = carryover.getAvailablePoints();
         ModConfig config = ModConfig.load();
@@ -177,7 +181,8 @@ public class RunEndHandler {
                     continue;
                 }
                 ItemStack barrier = new ItemStack((ItemLike)Items.BARRIER);
-                barrier.set(DataComponents.CUSTOM_NAME, Component.literal((String)"\u00a7c\u30ed\u30c3\u30af\u3055\u308c\u305f\u9632\u5177\u67a0 (\u30af\u30ea\u30c3\u30af\u30671\u30dd\u30a4\u30f3\u30c8\u6d88\u8cbb)"));
+                String part = i == 0 ? "\u982d" : (i == 1 ? "\u80f8" : (i == 2 ? "\u811a" : "\u8db3"));
+                barrier.set(DataComponents.CUSTOM_NAME, Component.literal((String)("\u00a7c\u30ed\u30c3\u30af\u3055\u308c\u305f\u9632\u5177\u67a0 (" + part + ") (\u30af\u30ea\u30c3\u30af\u30671\u30dd\u30a4\u30f3\u30c8\u6d88\u8cbb)")));
                 inv.setItem(invIdx, barrier);
             }
             int accIdx = 40;
@@ -214,17 +219,27 @@ public class RunEndHandler {
                     continue;
                 }
                 ItemStack barrier = new ItemStack((ItemLike)Items.BARRIER);
-                barrier.set(DataComponents.CUSTOM_NAME, Component.literal((String)"\u00a7c\u30ed\u30c3\u30af\u3055\u308c\u305f\u5f15\u304d\u7d99\u304e\u67a0 (\u30af\u30ea\u30c3\u30af\u30671\u30dd\u30a4\u30f3\u30c8\u6d88\u8cbb)"));
+                barrier.set(DataComponents.CUSTOM_NAME, Component.literal((String)("\u00a7c\u30ed\u30c3\u30af\u3055\u308c\u305f\u5f15\u304d\u7d99\u304e\u67a0 (\u67a0 " + (i + 1) + ") (\u30af\u30ea\u30c3\u30af\u30671\u30dd\u30a4\u30f3\u30c8\u6d88\u8cbb)")));
                 inv.setItem(invIdx, barrier);
             }
+
+            // Sync current equipment to player inventory slots in the menu
+            Inventory playerInv = player.getInventory();
+            final SimpleContainer finalInv = inv;
             player.openMenu(new MenuProvider(){
 
                 public Component getDisplayName() {
                     return Component.literal((String)"\u30a2\u30a4\u30c6\u30e0\u9078\u629e");
                 }
 
-                public AbstractContainerMenu createMenu(int syncId, Inventory playerInv, Player playerEntity) {
-                    return new CarryoverSelectScreenHandler(syncId, playerInv, (Container)inv, finalSlots, slotSources, kitName);
+                public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player playerEntity) {
+                    // Update player inventory slots with current equipment for visual aid
+                    for (int i = 0; i < 4; i++) {
+                        playerInventory.setItem(36 + i, playerInv.getArmor(i));
+                    }
+                    playerInventory.setItem(40, playerInv.offhand.get(0));
+                    
+                    return new CarryoverSelectScreenHandler(syncId, playerInventory, (Container)finalInv, finalSlots, slotSources, kitName, openedByMenu);
                 }
 
                 public void writeClientSideData(AbstractContainerMenu menu, RegistryFriendlyByteBuf buffer) {
@@ -235,6 +250,7 @@ public class RunEndHandler {
                         buffer.writeUtf((String)entry.getValue());
                     }
                     buffer.writeUtf(kitName);
+                    buffer.writeBoolean(openedByMenu);
                 }
             });
         } else {

@@ -58,13 +58,14 @@ extends AbstractContainerMenu {
     private final String kitName;
     private final Map<Integer, String> slotSources;
     public final Player player;
+    private final boolean openedByMenu;
 
     public CarryoverSelectScreenHandler(int syncId, Inventory playerInventory) {
-        this(syncId, playerInventory, (Container)new SimpleContainer(54), 0.0, new HashMap<Integer, String>(), "");
+        this(syncId, playerInventory, (Container)new SimpleContainer(54), 0.0, new HashMap<Integer, String>(), "", false);
     }
 
     public CarryoverSelectScreenHandler(int syncId, Inventory playerInventory, RegistryFriendlyByteBuf buffer) {
-        this(syncId, playerInventory, (Container)new SimpleContainer(54), buffer.readDouble(), CarryoverSelectScreenHandler.readSlotSources(buffer), buffer.readUtf());
+        this(syncId, playerInventory, (Container)new SimpleContainer(54), buffer.readDouble(), CarryoverSelectScreenHandler.readSlotSources(buffer), buffer.readUtf(), buffer.readBoolean());
     }
 
     private static Map<Integer, String> readSlotSources(RegistryFriendlyByteBuf buffer) {
@@ -88,7 +89,11 @@ extends AbstractContainerMenu {
         return this.slotSources;
     }
 
-    public CarryoverSelectScreenHandler(int syncId, Inventory playerInventory, Container inventory, double points, Map<Integer, String> slotSources, String kitName) {
+    public boolean isOpenedByMenu() {
+        return this.openedByMenu;
+    }
+
+    public CarryoverSelectScreenHandler(int syncId, Inventory playerInventory, Container inventory, double points, Map<Integer, String> slotSources, String kitName, boolean openedByMenu) {
         super((MenuType)LikerainRoguelike.CARRYOVER_SCREEN_HANDLER.get(), syncId);
         int j;
         int i;
@@ -96,6 +101,7 @@ extends AbstractContainerMenu {
         this.slotSources = slotSources;
         this.kitName = kitName != null ? kitName : "";
         this.player = playerInventory.player;
+        this.openedByMenu = openedByMenu;
         CarryoverSelectScreenHandler.checkContainerSize((Container)inventory, (int)54);
         this.inventory = inventory;
         inventory.startOpen(playerInventory.player);
@@ -116,10 +122,39 @@ extends AbstractContainerMenu {
     }
 
     public ItemStack quickMoveStack(Player player, int invSlot) {
-        return ItemStack.EMPTY;
+        if (this.openedByMenu) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack itemStack = ItemStack.EMPTY;
+        Slot slot = (Slot)this.slots.get(invSlot);
+        if (slot != null && slot.hasItem()) {
+            ItemStack itemStack2 = slot.getItem();
+            itemStack = itemStack2.copy();
+            if (invSlot < 54) {
+                if (!this.moveItemStackTo(itemStack2, 54, 90, true)) {
+                    return ItemStack.EMPTY;
+                }
+            } else if (!this.moveItemStackTo(itemStack2, 36, 54, false)) {
+                return ItemStack.EMPTY;
+            }
+            if (itemStack2.isEmpty()) {
+                slot.set(ItemStack.EMPTY);
+            } else {
+                slot.setChanged();
+            }
+        }
+        return itemStack;
     }
 
     public void clicked(int slotIndex, int button, ClickType actionType, Player player) {
+        if (this.openedByMenu) {
+            if (slotIndex >= 0 && slotIndex < 54) {
+                // Allow clicking on carryover slots but handle specifically if needed
+                // For now, let it pass to custom logic but block vanilla pick up
+            } else {
+                return; // Block interaction with player inventory when opened by menu
+            }
+        }
         if (slotIndex >= 0 && slotIndex < this.inventory.getContainerSize()) {
             Slot slot = this.getSlot(slotIndex);
             ItemStack clickedItem = slot.getItem();
@@ -134,7 +169,6 @@ extends AbstractContainerMenu {
                             CarryoverStorage.save(data);
                             slot.set(ItemStack.EMPTY);
                             player.sendSystemMessage((Component)Component.literal((String)"\u00a7a\u9632\u5177\u5f15\u304d\u7d99\u304e\u67a0\u3092\u30a2\u30f3\u30ed\u30c3\u30af\u3057\u307e\u3057\u305f\uff01"));
-                            this.points = this.points;
                         } else {
                             player.sendSystemMessage((Component)Component.literal((String)"\u00a7c\u30dd\u30a4\u30f3\u30c8\u304c\u8db3\u308a\u307e\u305b\u3093 (1\u30dd\u30a4\u30f3\u30c8\u5fc5\u8981\u3067\u3059)"));
                         }
@@ -146,7 +180,6 @@ extends AbstractContainerMenu {
                             CarryoverStorage.save(data);
                             slot.set(ItemStack.EMPTY);
                             player.sendSystemMessage((Component)Component.literal((String)"\u00a7a\u30a2\u30af\u30bb\u30b5\u30ea\u30fc\u5f15\u304d\u7d99\u304e\u67a0\u3092\u30a2\u30f3\u30ed\u30c3\u30af\u3057\u307e\u3057\u305f\uff01"));
-                            this.points = this.points;
                         } else {
                             player.sendSystemMessage((Component)Component.literal((String)"\u00a7c\u30dd\u30a4\u30f3\u30c8\u304c\u8db3\u308a\u307e\u305b\u3093 (1\u30dd\u30a4\u30f3\u30c8\u5fc5\u8981\u3067\u3059)"));
                         }
@@ -160,7 +193,6 @@ extends AbstractContainerMenu {
                                 CarryoverStorage.save(data);
                                 slot.set(ItemStack.EMPTY);
                                 player.sendSystemMessage((Component)Component.literal((String)"\u00a7a\u5f15\u304d\u7d99\u304e\u67a0\u3092\u30a2\u30f3\u30ed\u30c3\u30af\u3057\u307e\u3057\u305f\uff01"));
-                                this.points = this.points;
                             } else {
                                 player.sendSystemMessage((Component)Component.literal((String)"\u00a7c\u30dd\u30a4\u30f3\u30c8\u304c\u8db3\u308a\u307e\u305b\u3093 (1\u30dd\u30a4\u30f3\u30c8\u5fc5\u8981\u3067\u3059)"));
                             }
@@ -190,14 +222,26 @@ extends AbstractContainerMenu {
                         }
                         ItemStack purchasedItem = clickedItem.copy();
                         purchasedItem.remove(DataComponents.LORE);
-                        slot.set(ItemStack.EMPTY);
-                        this.setCarried(purchasedItem);
-                        this.points = this.points;
+                        if (this.openedByMenu) {
+                            // If opened by menu, we should probably not let them "take" it into cursor
+                            // but maybe just add to their inventory if there is space?
+                            // However, the request says "prevent taking items", so let's just block it or handle it safely.
+                            if (player.getInventory().add(purchasedItem)) {
+                                slot.set(ItemStack.EMPTY);
+                            }
+                        } else {
+                            slot.set(ItemStack.EMPTY);
+                            this.setCarried(purchasedItem);
+                        }
                         this.broadcastChanges();
                     }
                 }
                 return;
             }
+        }
+        if (this.openedByMenu && actionType != ClickType.QUICK_MOVE) {
+            // Block normal clicks that would pick up items
+            return;
         }
         super.clicked(slotIndex, button, actionType, player);
     }

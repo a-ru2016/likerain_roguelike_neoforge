@@ -46,11 +46,13 @@ extends AbstractContainerScreen<CarryoverSelectScreenHandler> {
 
     protected void init() {
         super.init();
-        this.doneButton = Button.builder((Component)Component.literal((String)"\u8ee2\u751f\u5b8c\u4e86"), btn -> {
-            PacketDistributor.sendToServer((CustomPacketPayload)new CarryoverSelectPayload(List.of()), (CustomPacketPayload[])new CustomPacketPayload[0]);
-            this.onClose();
-        }).bounds(this.leftPos + this.imageWidth + 10, this.topPos + 180, 80, 20).build();
-        this.addRenderableWidget(this.doneButton);
+        if (!((CarryoverSelectScreenHandler)this.menu).isOpenedByMenu()) {
+            this.doneButton = Button.builder((Component)Component.literal((String)"\u8ee2\u751f\u5b8c\u4e86"), btn -> {
+                PacketDistributor.sendToServer((CustomPacketPayload)new CarryoverSelectPayload(List.of()), (CustomPacketPayload[])new CustomPacketPayload[0]);
+                this.onClose();
+            }).bounds(this.leftPos + this.imageWidth + 10, this.topPos + 180, 80, 20).build();
+            this.addRenderableWidget(this.doneButton);
+        }
     }
 
     protected void renderBg(GuiGraphics context, float delta, int mouseX, int mouseY) {
@@ -97,7 +99,15 @@ extends AbstractContainerScreen<CarryoverSelectScreenHandler> {
     }
 
     public boolean shouldCloseOnEsc() {
-        return false;
+        return ((CarryoverSelectScreenHandler)this.menu).isOpenedByMenu();
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (((CarryoverSelectScreenHandler)this.menu).isOpenedByMenu() && keyCode == 79) { // 79 is 'O'
+            this.onClose();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }
 
