@@ -76,13 +76,14 @@ public class AccessoriesCompat {
         accessoriesChecked = true;
         try {
             accessoriesApiClass = Class.forName("io.wispforest.accessories.api.AccessoriesAPI");
-            getAccessoriesContainerMethod = accessoriesApiClass.getMethod("getOptionally", LivingEntity.class);
             try {
                 isAccessoryMethod = accessoriesApiClass.getMethod("isAccessory", ItemStack.class);
             }
             catch (Exception e) {
                 LOGGER.info("Accessories isAccessory method is not available: " + e.getMessage());
             }
+            Class<?> accessoriesCapabilityClass = Class.forName("io.wispforest.accessories.api.AccessoriesCapability");
+            getAccessoriesContainerMethod = accessoriesCapabilityClass.getMethod("getOptionally", LivingEntity.class);
             accessoriesAvailable = true;
             LOGGER.info("Accessories compatibility initialized.");
         }
